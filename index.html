@@ -258,6 +258,7 @@
 <script>
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwnMOlBxzVUQWY7rKMYWVwvZPi-QgLIaPzx5M9_0JSlPE_IOOEF8cGsz6P2dsXp64Nf/exec';
 let allData = [];
+let monthlySalesFromSheet = null; // 매출시트 월별 합계 (정기청소 포함)
 const charts = {};
 
 // 페이지 전환
@@ -278,11 +279,19 @@ document.getElementById('pageSelector').addEventListener('change', function() {
 async function fetchData() {
     try {
         const response = await fetch(WEB_APP_URL);
-        allData = await response.json();
+        const result = await response.json();
+        // GAS 업데이트 전(배열) / 후(객체) 모두 호환
+        if (Array.isArray(result)) {
+            allData = result;
+            monthlySalesFromSheet = null;
+        } else {
+            allData = result.rawData || [];
+            monthlySalesFromSheet = result.monthlySales || null;
+        }
         document.getElementById('lastUpdate').innerText = `✅ 업데이트: ${new Date().toLocaleTimeString()}`;
         updateDashboard();
-    } catch (e) { 
-        document.getElementById('lastUpdate').innerText = "❌ 데이터 연결 오류"; 
+    } catch (e) {
+        document.getElementById('lastUpdate').innerText = "❌ 데이터 연결 오류";
         console.error('Data fetch error:', e);
     }
 }
@@ -308,7 +317,10 @@ function updateDashboard() {
 
     let tSales = 0, tQuotes = 0, tWins = 0, wCount = 0, wRevenue = 0;
     const mWin = Array(12).fill(0).map(() => ({ q: 0, w: 0 }));
-    const mSales = Array(12).fill(0);
+    // 매출시트 데이터가 있으면 그걸 사용 (정기청소 포함), 없으면 RAW 계산
+    const mSales = (monthlySalesFromSheet && filter === '전체')
+        ? [...monthlySalesFromSheet]
+        : Array(12).fill(0);
     const partners = {}, channels = {};
     const dailyData = [];
     for(let i=0; i<7; i++) {
@@ -328,8 +340,11 @@ function updateDashboard() {
             const eDateObj = new Date(eRaw);
             const eTime = eDateObj.setHours(0,0,0,0);
             if (isWon && eDateObj.getFullYear() === 2026) {
-                tSales += price;
-                mSales[eDateObj.getMonth()] += price;
+                // 매출시트 없을 때 또는 서비스 유형 필터 시 RAW 합산
+                if (!monthlySalesFromSheet || filter !== '전체') {
+                    tSales += price;
+                    mSales[eDateObj.getMonth()] += price;
+                }
             }
             if (isWon && eTime >= lastMonday.getTime() && eTime <= lastSunday.getTime()) {
                 let dayIdx = eDateObj.getDay(); 
@@ -357,6 +372,10 @@ function updateDashboard() {
         }
     });
 
+    // 전체 필터 + 매출시트 데이터 있으면 정확한 총합 사용
+    if (monthlySalesFromSheet && filter === '전체') {
+        tSales = monthlySalesFromSheet.reduce((a, b) => a + b, 0);
+    }
     document.getElementById('kpiSales').innerText = tSales.toLocaleString() + '원';
     document.getElementById('kpiQuotes').innerText = tQuotes + '건';
     document.getElementById('kpiWinRate').innerText = tQuotes ? (tWins/tQuotes*100).toFixed(1) + '%' : '0%';
