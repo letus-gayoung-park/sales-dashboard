@@ -365,7 +365,6 @@ function updateDashboard() {
         }
     });
 
-    document.getElementById('kpiSales').innerText = tSales.toLocaleString() + '원';
     document.getElementById('kpiQuotes').innerText = tQuotes + '건';
     document.getElementById('kpiWinRate').innerText = tQuotes ? (tWins/tQuotes*100).toFixed(1) + '%' : '0%';
     document.getElementById('weekCount').innerText = wCount + '건';
@@ -378,6 +377,7 @@ function updateDashboard() {
         for (let i = 0; i < 12; i++) mSales[i] = apiMonthlySales[i] || 0;
         tSales = mSales.reduce((a, b) => a + b, 0);
     }
+    document.getElementById('kpiSales').innerText = tSales.toLocaleString() + '원';
 
     renderAllCharts(mWin, mSales, partners, channels);
 }
