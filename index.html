@@ -1,0 +1,536 @@
+<!DOCTYPE html><html lang="ko"><head>
+    <meta charset="UTF-8">
+    <title>2026 통합 영업 대시보드 + 사업부 회의자료</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #4e73df; --success: #1cc88a; --info: #36b9cc; --dark: #333; --bg: #f8f9fc; }
+        body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--dark); }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 15px 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px; }
+        .kpi-card { background: #fff; padding: 20px; border-radius: 12px; border-left: 5px solid var(--primary); text-align: center; }
+        .kpi-value { font-size: 1.6rem; font-weight: bold; margin-top: 8px; color: #2e59d9; }
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
+        .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); min-height: 400px; }
+        .full-card { grid-column: span 2; background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 2px solid var(--primary); }
+        h3 { margin: 0 0 15px 0; font-size: 1rem; color: #555; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .summary-box { display: flex; justify-content: space-around; align-items: center; padding: 20px; background: #f8f9fc; border-radius: 10px; margin-bottom: 20px; border: 1px solid #e3e6f0; }
+        .summary-item { text-align: center; flex: 1; }
+        .summary-item div { font-size: 0.9rem; color: #6e707e; margin-bottom: 5px; }
+        .summary-item b { font-size: 1.8rem; color: #4e73df; }
+        .daily-table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: center; }
+        .daily-table th { background: #f8f9fc; padding: 12px; border-bottom: 2px solid #e3e6f0; color: #4e73df; font-size: 0.9rem; }
+        .daily-table td { padding: 12px; border-bottom: 1px solid #eee; font-size: 0.95rem; text-align: center; }
+        .day-label { font-weight: bold; color: #333; }
+        .val-count { color: #1cc88a; font-weight: bold; }
+        .val-revenue { color: #4e73df; font-weight: bold; }
+        .chart-container { position: relative; height: 320px; width: 100%; }
+        select { padding: 8px; border-radius: 6px; font-weight: bold; cursor: pointer; border: 1px solid #d1d3e2; margin-right: 10px; }
+        
+        /* 사업부 회의자료 스타일 */
+        .meeting-container { display: none; }
+        .meeting-header { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 30px; text-align: center; }
+        .meeting-title { font-size: 2rem; font-weight: bold; color: #333; margin-bottom: 10px; }
+        .meeting-subtitle { font-size: 1.1rem; color: #666; }
+        .section-title { background: #4e73df; color: white; padding: 15px 20px; border-radius: 8px; font-size: 1.3rem; font-weight: bold; margin: 30px 0 20px 0; }
+        .metrics-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        .metrics-table th { background: #f8f9fc; padding: 15px; text-align: center; font-weight: bold; border-bottom: 2px solid #e3e6f0; color: #4e73df; }
+        .metrics-table td { padding: 15px; text-align: center; border-bottom: 1px solid #eee; font-size: 1.1rem; }
+        .metrics-table .category-cell { background: #f8f9fc; font-weight: bold; text-align: left; padding-left: 20px; }
+        .metric-value-large { font-size: 1.3rem; font-weight: bold; color: #2e59d9; }
+        .trend-positive { color: #1cc88a; font-weight: bold; }
+        .trend-negative { color: #e74a3b; font-weight: bold; }
+        .month-header { background: #e3e6f0; font-weight: bold; }
+        .total-row { background: #f8f9fc; font-weight: bold; }
+        .highlight-cell { background: #fff3cd; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2 style="margin:0;">📈 2026 통합 영업 대시보드</h2>
+    <div style="display:flex; align-items:center; gap:15px;">
+        <span id="lastUpdate" style="font-size:0.9rem; color:#888;">데이터 로딩 중...</span>
+        <select id="pageSelector">
+            <option value="dashboard">전체 대시보드</option>
+            <option value="meeting">사업부 회의 자료</option>
+        </select>
+        <select id="typeFilter">
+            <option value="전체">전체 서비스</option>
+            <option value="기업이사">기업이사</option>
+            <option value="클리닝">클리닝</option>
+        </select>
+    </div>
+</div>
+
+<!-- 기존 대시보드 -->
+<div id="dashboardPage" class="dashboard-container">
+    <div class="kpi-row">
+        <div class="kpi-card"><div>2026 연간 누적 매출 (실행일)</div><div class="kpi-value" id="kpiSales">0원</div></div>
+        <div class="kpi-card" style="border-left-color: var(--success);"><div>2026 연간 누적 견적</div><div class="kpi-value" id="kpiQuotes">0건</div></div>
+        <div class="kpi-card" style="border-left-color: var(--info);"><div>2026 전체 수주율</div><div class="kpi-value" id="kpiWinRate">0%</div></div>
+    </div>
+
+    <div class="grid">
+        <div class="card"><h3>1) 월별 수주율 추이 (견적일)</h3><div class="chart-container"><canvas id="chart1"></canvas></div></div>
+        <div class="card"><h3>2) 월별 매출 추이 (실행일)</h3><div class="chart-container"><canvas id="chart2"></canvas></div></div>
+        <div class="card"><h3>3) 협력사별 당월 배정 건수 (2026-02)</h3><div class="chart-container"><canvas id="chart3"></canvas></div></div>
+        <div class="card"><h3>4) 유입경로별 성과 (견적건수 &amp; 수주율)</h3><div class="chart-container"><canvas id="chart4"></canvas></div></div>
+        
+        <div class="full-card">
+            <h3 id="weekTitle">📍 직전 주 실행 실적 요약</h3>
+            <div class="summary-box">
+                <div class="summary-item"><div>직전 주 실행 합계</div><b id="weekCount">0건</b></div>
+                <div class="summary-item"><div>직전 주 매출 합계</div><b id="weekRevenue">0원</b></div>
+            </div>
+            
+            <h3>📅 일자별 상세 실적</h3>
+            <table class="daily-table">
+                <thead><tr><th>날짜</th><th>실행 건수</th><th>실행 매출액</th></tr></thead>
+                <tbody id="dailyBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 사업부 회의자료 페이지 -->
+<div id="meetingPage" class="meeting-container">
+    <div class="meeting-header">
+        <div class="meeting-title">2026년 <span id="meetingMonth">2</span>월 사업부 회의자료</div>
+        <div class="meeting-subtitle">📊 월간 실적 분석 및 주요 지표</div>
+    </div>
+
+    <!-- 1. 레터스 무브 (기업이사) -->
+    <div class="section-title">1. 레터스 무브</div>
+    <table class="metrics-table">
+        <thead>
+            <tr>
+                <th>구분</th>
+                <th>1월</th>
+                <th>2월</th>
+                <th>3월</th>
+                <th>4월</th>
+                <th>5월</th>
+                <th>6월</th>
+                <th>7월</th>
+                <th>8월</th>
+                <th>9월</th>
+                <th>10월</th>
+                <th>11월</th>
+                <th>12월</th>
+                <th class="highlight-cell">2026년 누계</th>
+                <th>[2025년 전체]</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="category-cell">견적 (건)</td>
+                <td id="move-quote-1">-</td>
+                <td id="move-quote-2">-</td>
+                <td id="move-quote-3">-</td>
+                <td id="move-quote-4">-</td>
+                <td id="move-quote-5">-</td>
+                <td id="move-quote-6">-</td>
+                <td id="move-quote-7">-</td>
+                <td id="move-quote-8">-</td>
+                <td id="move-quote-9">-</td>
+                <td id="move-quote-10">-</td>
+                <td id="move-quote-11">-</td>
+                <td id="move-quote-12">-</td>
+                <td class="metric-value-large highlight-cell" id="move-quote-total">0</td>
+                <td id="move-quote-2025">-</td>
+            </tr>
+            <tr>
+                <td class="category-cell">실행 (건)</td>
+                <td id="move-exec-1">-</td>
+                <td id="move-exec-2">-</td>
+                <td id="move-exec-3">-</td>
+                <td id="move-exec-4">-</td>
+                <td id="move-exec-5">-</td>
+                <td id="move-exec-6">-</td>
+                <td id="move-exec-7">-</td>
+                <td id="move-exec-8">-</td>
+                <td id="move-exec-9">-</td>
+                <td id="move-exec-10">-</td>
+                <td id="move-exec-11">-</td>
+                <td id="move-exec-12">-</td>
+                <td class="metric-value-large highlight-cell" id="move-exec-total">0</td>
+                <td id="move-exec-2025">-</td>
+            </tr>
+            <tr class="total-row">
+                <td class="category-cell">매출 (백만원)</td>
+                <td id="move-sales-1">-</td>
+                <td id="move-sales-2">-</td>
+                <td id="move-sales-3">-</td>
+                <td id="move-sales-4">-</td>
+                <td id="move-sales-5">-</td>
+                <td id="move-sales-6">-</td>
+                <td id="move-sales-7">-</td>
+                <td id="move-sales-8">-</td>
+                <td id="move-sales-9">-</td>
+                <td id="move-sales-10">-</td>
+                <td id="move-sales-11">-</td>
+                <td id="move-sales-12">-</td>
+                <td class="metric-value-large highlight-cell" id="move-sales-total">0</td>
+                <td id="move-sales-2025">-</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- 2. 레터스 클린 (클리닝) -->
+    <div class="section-title">2. 레터스 클린</div>
+    <table class="metrics-table">
+        <thead>
+            <tr>
+                <th>구분</th>
+                <th>1월</th>
+                <th>2월</th>
+                <th>3월</th>
+                <th>4월</th>
+                <th>5월</th>
+                <th>6월</th>
+                <th>7월</th>
+                <th>8월</th>
+                <th>9월</th>
+                <th>10월</th>
+                <th>11월</th>
+                <th>12월</th>
+                <th class="highlight-cell">2026년 누계</th>
+                <th>[2025년 전체]</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="category-cell">견적 (건)</td>
+                <td id="clean-quote-1">-</td>
+                <td id="clean-quote-2">-</td>
+                <td id="clean-quote-3">-</td>
+                <td id="clean-quote-4">-</td>
+                <td id="clean-quote-5">-</td>
+                <td id="clean-quote-6">-</td>
+                <td id="clean-quote-7">-</td>
+                <td id="clean-quote-8">-</td>
+                <td id="clean-quote-9">-</td>
+                <td id="clean-quote-10">-</td>
+                <td id="clean-quote-11">-</td>
+                <td id="clean-quote-12">-</td>
+                <td class="metric-value-large highlight-cell" id="clean-quote-total">0</td>
+                <td id="clean-quote-2025">-</td>
+            </tr>
+            <tr>
+                <td class="category-cell">실행 (건)</td>
+                <td id="clean-exec-1">-</td>
+                <td id="clean-exec-2">-</td>
+                <td id="clean-exec-3">-</td>
+                <td id="clean-exec-4">-</td>
+                <td id="clean-exec-5">-</td>
+                <td id="clean-exec-6">-</td>
+                <td id="clean-exec-7">-</td>
+                <td id="clean-exec-8">-</td>
+                <td id="clean-exec-9">-</td>
+                <td id="clean-exec-10">-</td>
+                <td id="clean-exec-11">-</td>
+                <td id="clean-exec-12">-</td>
+                <td class="metric-value-large highlight-cell" id="clean-exec-total">0</td>
+                <td id="clean-exec-2025">-</td>
+            </tr>
+            <tr class="total-row">
+                <td class="category-cell">매출 (백만원)</td>
+                <td id="clean-sales-1">-</td>
+                <td id="clean-sales-2">-</td>
+                <td id="clean-sales-3">-</td>
+                <td id="clean-sales-4">-</td>
+                <td id="clean-sales-5">-</td>
+                <td id="clean-sales-6">-</td>
+                <td id="clean-sales-7">-</td>
+                <td id="clean-sales-8">-</td>
+                <td id="clean-sales-9">-</td>
+                <td id="clean-sales-10">-</td>
+                <td id="clean-sales-11">-</td>
+                <td id="clean-sales-12">-</td>
+                <td class="metric-value-large highlight-cell" id="clean-sales-total">0</td>
+                <td id="clean-sales-2025">-</td>
+            </tr>
+        </tbody>
+    </table>
+
+</div>
+
+<script>
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwnMOlBxzVUQWY7rKMYWVwvZPi-QgLIaPzx5M9_0JSlPE_IOOEF8cGsz6P2dsXp64Nf/exec';
+let allData = [];
+const charts = {};
+
+// 페이지 전환
+document.getElementById('pageSelector').addEventListener('change', function() {
+    const page = this.value;
+    if (page === 'dashboard') {
+        document.getElementById('dashboardPage').style.display = 'block';
+        document.getElementById('meetingPage').style.display = 'none';
+        document.getElementById('typeFilter').style.display = 'inline-block';
+    } else {
+        document.getElementById('dashboardPage').style.display = 'none';
+        document.getElementById('meetingPage').style.display = 'block';
+        document.getElementById('typeFilter').style.display = 'none';
+        updateMeetingPage();
+    }
+});
+
+async function fetchData() {
+    try {
+        const response = await fetch(WEB_APP_URL);
+        allData = await response.json();
+        document.getElementById('lastUpdate').innerText = `✅ 업데이트: ${new Date().toLocaleTimeString()}`;
+        updateDashboard();
+    } catch (e) { 
+        document.getElementById('lastUpdate').innerText = "❌ 데이터 연결 오류"; 
+        console.error('Data fetch error:', e);
+    }
+}
+
+function updateDashboard() {
+    const filter = document.getElementById('typeFilter').value;
+    const now = new Date();
+    const dayOfWeek = now.getDay(); 
+    const lastMonday = new Date(now);
+    const diffToLastMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + 7;
+    lastMonday.setDate(now.getDate() - diffToLastMonday);
+    lastMonday.setHours(0, 0, 0, 0);
+    const lastSunday = new Date(lastMonday);
+    lastSunday.setDate(lastMonday.getDate() + 6);
+    lastSunday.setHours(23, 59, 59, 999);
+
+    document.getElementById('weekTitle').innerText = `📍 직전 주 실행 실적 상세 (${lastMonday.toLocaleDateString()} ~ ${lastSunday.toLocaleDateString()})`;
+
+    let data = allData.filter(d => d['수요처명'] && String(d['수요처명']).trim() !== "");
+    if (filter !== "전체") {
+        data = data.filter(d => String(d['서비스 유형(대)'] || '').trim() === filter);
+    }
+
+    let tSales = 0, tQuotes = 0, tWins = 0, wCount = 0, wRevenue = 0;
+    const mWin = Array(12).fill(0).map(() => ({ q: 0, w: 0 }));
+    const mSales = Array(12).fill(0);
+    const partners = {}, channels = {};
+    const dailyData = [];
+    for(let i=0; i<7; i++) {
+        const d = new Date(lastMonday);
+        d.setDate(lastMonday.getDate() + i);
+        dailyData.push({ date: d.toLocaleDateString(), count: 0, revenue: 0 });
+    }
+
+    data.forEach(d => {
+        const qRaw = String(d['견적 발송 일자'] || '').trim();
+        const eRaw = String(d['서비스 실행 일자'] || '').trim();
+        const status = String(d['수주여부'] || '').trim().toUpperCase();
+        const isWon = (status === 'O' || status === 'Ｏ' || status === '0');
+        const price = parseInt(String(d['견적가'] || '0').replace(/[^0-9]/g, "")) || 0;
+
+        if (eRaw) {
+            const eDateObj = new Date(eRaw);
+            const eTime = eDateObj.setHours(0,0,0,0);
+            if (isWon && eDateObj.getFullYear() === 2026) {
+                tSales += price;
+                mSales[eDateObj.getMonth()] += price;
+            }
+            if (isWon && eTime >= lastMonday.getTime() && eTime <= lastSunday.getTime()) {
+                let dayIdx = eDateObj.getDay(); 
+                dayIdx = (dayIdx === 0) ? 6 : dayIdx - 1; 
+                dailyData[dayIdx].count++;
+                dailyData[dayIdx].revenue += price;
+                wCount++; wRevenue += price;
+            }
+        }
+        if (qRaw) {
+            const qDateObj = new Date(qRaw);
+            if (qDateObj.getFullYear() === 2026) {
+                tQuotes++;
+                mWin[qDateObj.getMonth()].q++;
+                if (isWon) { tWins++; mWin[qDateObj.getMonth()].w++; }
+                if (qRaw.includes("2026-02")) {
+                    const pKey = Object.keys(d).find(k => k.includes('실행 조직')) || '실행 조직(협력사)';
+                    const p = String(d[pKey] || '미지정').trim();
+                    if (p !== '미지정') partners[p] = (partners[p] || 0) + 1;
+                }
+                const c = String(d['유입경로(대분류)'] || '기타').trim();
+                if (!channels[c]) channels[c] = { q: 0, w: 0 };
+                channels[c].q++; if (isWon) channels[c].w++;
+            }
+        }
+    });
+
+    document.getElementById('kpiSales').innerText = tSales.toLocaleString() + '원';
+    document.getElementById('kpiQuotes').innerText = tQuotes + '건';
+    document.getElementById('kpiWinRate').innerText = tQuotes ? (tWins/tQuotes*100).toFixed(1) + '%' : '0%';
+    document.getElementById('weekCount').innerText = wCount + '건';
+    document.getElementById('weekRevenue').innerText = wRevenue.toLocaleString() + '원';
+    const tbody = document.getElementById('dailyBody');
+    tbody.innerHTML = dailyData.map(item => `<tr><td class="day-label">${item.date}</td><td class="val-count">${item.count}건</td><td class="val-revenue">${item.revenue.toLocaleString()}원</td></tr>`).join('');
+
+    renderAllCharts(mWin, mSales, partners, channels);
+}
+
+function updateMeetingPage() {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    document.getElementById('meetingMonth').innerText = currentMonth;
+
+    // 레터스 무브 (기업이사) 데이터 계산
+    const moveData = calculateServiceData('기업이사');
+    populateServiceTable('move', moveData);
+
+    // 레터스 클린 (클리닝) 데이터 계산
+    const cleanData = calculateServiceData('클리닝');
+    populateServiceTable('clean', cleanData);
+}
+
+function calculateServiceData(serviceType) {
+    const data = allData.filter(d => 
+        d['수요처명'] && 
+        String(d['수요처명']).trim() !== "" &&
+        String(d['서비스 유형(대)'] || '').trim() === serviceType
+    );
+
+    const monthlyQuotes = Array(12).fill(0);
+    const monthlyExec = Array(12).fill(0);
+    const monthlySales = Array(12).fill(0);
+    let quotesTotal = 0, execTotal = 0, salesTotal = 0;
+
+    data.forEach(d => {
+        const qRaw = String(d['견적 발송 일자'] || '').trim();
+        const eRaw = String(d['서비스 실행 일자'] || '').trim();
+        const status = String(d['수주여부'] || '').trim().toUpperCase();
+        const isWon = (status === 'O' || status === 'Ｏ' || status === '0');
+        const price = parseInt(String(d['견적가'] || '0').replace(/[^0-9]/g, "")) || 0;
+
+        // 견적 건수
+        if (qRaw) {
+            const qDate = new Date(qRaw);
+            if (qDate.getFullYear() === 2026) {
+                monthlyQuotes[qDate.getMonth()]++;
+                quotesTotal++;
+            }
+        }
+
+        // 실행 건수 및 매출
+        if (eRaw && isWon) {
+            const eDate = new Date(eRaw);
+            if (eDate.getFullYear() === 2026) {
+                monthlyExec[eDate.getMonth()]++;
+                monthlySales[eDate.getMonth()] += price;
+                execTotal++;
+                salesTotal += price;
+            }
+        }
+    });
+
+    return {
+        monthlyQuotes,
+        monthlyExec,
+        monthlySales,
+        quotesTotal,
+        execTotal,
+        salesTotal
+    };
+}
+
+function populateServiceTable(prefix, data) {
+    const now = new Date();
+    const currentMonth = now.getMonth(); // 0-11
+
+    // 견적 건수
+    for (let i = 0; i < 12; i++) {
+        const cell = document.getElementById(`${prefix}-quote-${i + 1}`);
+        if (cell) {
+            if (i <= currentMonth) {
+                cell.innerText = data.monthlyQuotes[i] || '0';
+            } else {
+                cell.innerText = '';
+                cell.style.background = '#f8f9fc';
+            }
+        }
+    }
+    document.getElementById(`${prefix}-quote-total`).innerText = data.quotesTotal;
+    document.getElementById(`${prefix}-quote-2025`).innerText = '-'; // 2025년 데이터는 별도 수집 필요
+
+    // 실행 건수
+    for (let i = 0; i < 12; i++) {
+        const cell = document.getElementById(`${prefix}-exec-${i + 1}`);
+        if (cell) {
+            if (i <= currentMonth) {
+                cell.innerText = data.monthlyExec[i] || '0';
+            } else {
+                cell.innerText = '';
+                cell.style.background = '#f8f9fc';
+            }
+        }
+    }
+    document.getElementById(`${prefix}-exec-total`).innerText = data.execTotal;
+    document.getElementById(`${prefix}-exec-2025`).innerText = '-';
+
+    // 매출 (백만원 단위)
+    for (let i = 0; i < 12; i++) {
+        const cell = document.getElementById(`${prefix}-sales-${i + 1}`);
+        if (cell) {
+            if (i <= currentMonth) {
+                const value = Math.round(data.monthlySales[i] / 1000000);
+                cell.innerText = value > 0 ? value : '0';
+            } else {
+                cell.innerText = '';
+                cell.style.background = '#f8f9fc';
+            }
+        }
+    }
+    const totalSales = Math.round(data.salesTotal / 1000000);
+    document.getElementById(`${prefix}-sales-total`).innerText = totalSales;
+    document.getElementById(`${prefix}-sales-2025`).innerText = '-';
+}
+
+function renderAllCharts(mWin, mSales, partners, channels) {
+    const labels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+    const config = (id, type, data, options) => {
+        if(charts[id]) charts[id].destroy();
+        charts[id] = new Chart(document.getElementById(id), { type, data, options });
+    };
+
+    config('chart1', 'bar', { labels, datasets: [{ label: '수주율 (%)', data: mWin.map(s => s.q ? (s.w/s.q*100).toFixed(1) : 0), backgroundColor: '#36b9cc' }] }, { maintainAspectRatio: false, scales: { y: { max: 100 } } });
+    config('chart2', 'line', { labels, datasets: [{ label: '2026 매출', data: mSales, borderColor: '#4e73df', backgroundColor: 'rgba(78,115,223,0.1)', fill: true, tension: 0.3 }] }, { maintainAspectRatio: false });
+    const pLabels = Object.keys(partners).sort((a,b) => partners[b] - partners[a]).slice(0, 10);
+    config('chart3', 'bar', { labels: pLabels, datasets: [{ label: '배정 건수', data: pLabels.map(l => partners[l]), backgroundColor: '#1cc88a' }] }, { indexAxis: 'y', maintainAspectRatio: false });
+    
+    const cLabels = Object.keys(channels);
+    config('chart4', 'bar', { 
+        labels: cLabels, 
+        datasets: [
+            { 
+                label: '견적건수', 
+                data: cLabels.map(l => channels[l].q), 
+                backgroundColor: 'rgba(78, 115, 223, 0.7)', 
+                yAxisID: 'y',
+                order: 2
+            },
+            { 
+                label: '수주율 (%)', 
+                data: cLabels.map(l => channels[l].q ? (channels[l].w/channels[l].q*100).toFixed(1) : 0), 
+                type: 'line', 
+                borderColor: '#e74a3b', 
+                borderWidth: 3,
+                pointBackgroundColor: '#e74a3b',
+                pointRadius: 4,
+                tension: 0.2, 
+                yAxisID: 'y1',
+                order: 1
+            }
+        ] 
+    }, { 
+        maintainAspectRatio: false,
+        scales: {
+            y: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: '건수' } },
+            y1: { type: 'linear', position: 'right', beginAtZero: true, max: 100, title: { display: true, text: '수주율 (%)' }, grid: { drawOnChartArea: false } }
+        }
+    });
+}
+
+document.getElementById('typeFilter').addEventListener('change', updateDashboard);
+fetchData();
+</script>
+
+</body></html>
