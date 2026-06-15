@@ -258,6 +258,7 @@
 <script>
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwnMOlBxzVUQWY7rKMYWVwvZPi-QgLIaPzx5M9_0JSlPE_IOOEF8cGsz6P2dsXp64Nf/exec';
 let allData = [];
+let apiMonthlySales = null;
 const charts = {};
 
 // 페이지 전환
@@ -278,7 +279,14 @@ document.getElementById('pageSelector').addEventListener('change', function() {
 async function fetchData() {
     try {
         const response = await fetch(WEB_APP_URL);
-        allData = await response.json();
+        const parsed = await response.json();
+        if (Array.isArray(parsed)) {
+            allData = parsed;
+            apiMonthlySales = null;
+        } else {
+            allData = parsed.rawData || [];
+            apiMonthlySales = parsed.monthlySales || null;
+        }
         document.getElementById('lastUpdate').innerText = `✅ 업데이트: ${new Date().toLocaleTimeString()}`;
         updateDashboard();
     } catch (e) {
@@ -327,7 +335,7 @@ function updateDashboard() {
         if (eRaw) {
             const eDateObj = new Date(eRaw);
             const eTime = eDateObj.setHours(0,0,0,0);
-            if (isWon && eDateObj.getFullYear() === 2026) {
+            if (isWon && eDateObj.getFullYear() === 2026 && !apiMonthlySales) {
                 tSales += price;
                 mSales[eDateObj.getMonth()] += price;
             }
@@ -364,6 +372,12 @@ function updateDashboard() {
     document.getElementById('weekRevenue').innerText = wRevenue.toLocaleString() + '원';
     const tbody = document.getElementById('dailyBody');
     tbody.innerHTML = dailyData.map(item => `<tr><td class="day-label">${item.date}</td><td class="val-count">${item.count}건</td><td class="val-revenue">${item.revenue.toLocaleString()}원</td></tr>`).join('');
+
+    // 매출시트 기준 override (GAS API에서 monthlySales 수신 시)
+    if (apiMonthlySales) {
+        for (let i = 0; i < 12; i++) mSales[i] = apiMonthlySales[i] || 0;
+        tSales = mSales.reduce((a, b) => a + b, 0);
+    }
 
     renderAllCharts(mWin, mSales, partners, channels);
 }
